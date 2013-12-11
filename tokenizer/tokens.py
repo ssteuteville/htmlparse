@@ -14,17 +14,17 @@ class Doctype(object):
         self.name = ""
         self.public_id = ""
         self.system_id = ""
-        self.force_quirks_flag = force_quirks_modes.OFF
+        self.force_quirks_flag = "off"
 
 class StartTag(object):
     def __init__(self, tag_name):
-        self.self_closing_flag = self_closing_modes.UNSET
+        self.self_closing_flag = "unset"
         self.attributes = []
         self.tag_name= tag_name
 
 class StopTag(object):
     def __init__(self, tag_name):
-        self.self_closing_flag = self_closing_modes.UNSET
+        self.self_closing_flag = "unset"
         self.attributes = []
         self.tag_name = tag_name
 

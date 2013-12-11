@@ -17,6 +17,8 @@ class HtmlTreeConstructor(object):
         print("DATA FORMAT")
         for token in self.tree:
             print(str(type(token)))
+            if isinstance(token, tk.Doctype):
+                print("\tForce Quirks Flag = %s" % token.force_quirks_flag)
 
         print("HTML FORMAT")
         for token in self.tree:
@@ -41,5 +43,9 @@ class HtmlTreeConstructor(object):
                     print(" "*(count), end="")
                 print(token.data, end="")
                 data = True
+            elif isinstance(token, tk.Doctype):
+                print("<!DOCTYPE " + token.name, end=" ")
+                print("PUBLIC " + '"' + token.public_id + '"', end=" ")
+                print('"' + token.system_id + '">')
             elif isinstance(token, tk.Comment):
                 print(" "*(count+1) + "<!--" + token.data + "-->")

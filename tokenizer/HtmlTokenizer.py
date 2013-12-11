@@ -5,7 +5,7 @@ import html_tree_constructor as tree
 from state_machine import StateMachine, ParseError
 __author__ = 'shane'
 tokens =[] #treated as current element stack.
-buffer = ""
+temp_buffer = ""
 use_buffer = False
 
 
@@ -39,26 +39,27 @@ class AfterDOCTYPEName(State):
         print("After DOCTYPE Name")
 
     def next(self, input):
+        print("input = %s" % input)
+        global temp_buffer
         if input.isspace():
             return HtmlTokenizer.AfterDOCTYPEName
         elif input == ">":
             HtmlTokenizer.tree.emit(tokens[-1])
             return HtmlTokenizer.Data
         #TODO handle EOF case
-        else:
-            global buffer
-            buffer += input
-            if buffer.lower() == "public":
-                buffer = ""
+        elif len(temp_buffer) <= 6:
+            temp_buffer += input
+            if temp_buffer.lower() == "public":
+                temp_buffer = ""
                 return HtmlTokenizer.AfterDOCTYPEPublicKeyword
-            elif buffer.lower() == "system":
-                buffer = ""
+            elif temp_buffer.lower() == "system":
+                temp_buffer = ""
                 return HtmlTokenizer.AfterDOCTYPESystemKeyword
-            elif len(buffer) >= 6:
+            else:
                 return HtmlTokenizer.AfterDOCTYPEName
-            #else:
-            #    tokens[-1].force_quirks_flag = "on"
-            #    return HtmlTokenizer.BogusDOCTYPE
+        else:
+            tokens[-1].force_quirks_flag = "on"
+            return HtmlTokenizer.BogusDOCTYPE
 
 class AfterDOCTYPEPublicIdentifier(State):
     def run(self):
@@ -100,6 +101,7 @@ class AfterDOCTYPESystemKeyword(State):
         print("After DOCTYPE System Keyword")
 
     def next(self, input):
+        print("input=%s" % input)
         if input.isspace():
             return HtmlTokenizer.BeforeDOCTYPESystemIdentifier
         elif input == '"':
@@ -109,9 +111,9 @@ class AfterDOCTYPESystemKeyword(State):
             HtmlTokenizer.tree.emit(tokens[-1])
             return HtmlTokenizer.Data
         #TODO EOF and Single Quote Cases
-        #else:
-        #    tokens[-1].force_quirks_flag = "on"
-        #    raise ParseError("After DOCTYPE System Keyword ERROR", state_change=HtmlTokenizer.BogusDOCTYPE)
+        else:
+            tokens[-1].force_quirks_flag = "on"
+            raise ParseError("After DOCTYPE System Keyword ERROR", state_change=HtmlTokenizer.BogusDOCTYPE)
 
 class AfterDOCTYPESystemIdentifier(State):
     def run(self):
@@ -119,13 +121,13 @@ class AfterDOCTYPESystemIdentifier(State):
 
     def next(self, input):
         if input.isspace():
-            return HtmlTokenizer.AfterDOCTYPESystemIdentifier(State)
+            return HtmlTokenizer.AfterDOCTYPESystemIdentifier
         elif input == ">":
             HtmlTokenizer.tree.emit(tokens[-1])
             return HtmlTokenizer.Data
         #TODO EOF Case
-        #else:
-        #    raise ParseError("After DOCTYPE SYSTEM ID STATE ERROR", state_change=HtmlTokenizer.BogusDOCTYPE)
+        else:
+            raise ParseError("After DOCTYPE SYSTEM ID STATE ERROR", state_change=HtmlTokenizer.BogusDOCTYPE)
 
 class BogusDOCTYPE(State):
     def run(self):
@@ -253,7 +255,7 @@ class BeforeDOCTYPEName(State):
             tokens.append(tk.Doctype())
             tokens[-1].force_quirks_flag = "on"
             HtmlTokenizer.tree.emit(tokens[-1])
-            raise ParseError("BEFORE DOCTYPE NAME ERROR", HtmlTokenizer.Data)
+            raise ParseError("BEFORE DOCTYPE NAME ERROR", state_change=HtmlTokenizer.Data)
         else:
             tokens.append(tk.Doctype())
             tokens[-1].name = input
@@ -271,9 +273,69 @@ class BetweenDOCTYPEPublicAndSystemIdentifier(State):
             return HtmlTokenizer.Data
         elif input == '"':
             tokens[-1].system_id = ""
+            return HtmlTokenizer.DOCTYPESystemIdentifierDoubleQuote
         #TODO EOF
-        #else:
-        #    raise ParseError("Between public and system DOCTYPE id", state_change=HtmlTokenizer.BogusDOCTYPE)
+        else:
+            print("input=%s" % input)
+            raise ParseError("Between public and system DOCTYPE id", state_change=HtmlTokenizer.BogusDOCTYPE)
+
+class BeforeDOCTYPEPublicIdentifier(State):
+    def run(self):
+        print("Before DOCTYPE Public ID")
+
+    def next(self, input):
+        if input.isspace():
+            return HtmlTokenizer.BeforeDOCTYPEPublicIdentifier
+        elif input == '"':
+            tokens[-1].public_id = ""
+            return HtmlTokenizer.DOCTYPEPublicIdentifierDoubleQuote
+        #TODO Single quote case
+        elif input == ">":
+            tokens[-1].force_quirks_flag = "on"
+            HtmlTokenizer.tree.emit(tokens[-1])
+            return HtmlTokenizer.Data
+        #TODO EOF CASE
+        else:
+            tokens[-1].force_quirks_flag = "on"
+            raise ParseError("BEFORE DOCTYPE PUB ID ERROR", state_change=HtmlTokenizer.BogusDOCTYPE)
+
+class BeforeDOCTYPESystemIdentifier(State):
+    def run(self):
+        print("Before Doctype System Id STATE")
+
+    def next(self, input):
+        if input.isspace():
+            return HtmlTokenizer.BeforeDOCTYPESystemIdentifier
+        elif input =='"':
+            tokens[-1].system_id = ""
+            return HtmlTokenizer.DOCTYPESystemIdentifierDoubleQuote
+        elif input == ">":
+            tokens[-1].force_quirks_flag = "on"
+            return HtmlTokenizer.Data
+        #TODO EOF
+        else:
+            tokens[-1].force_quirks_flag = "on"
+            return HtmlTokenizer.BogusDOCTYPE
+
+class BogusComment(State):
+    def run(self):
+        print("Bogus Comment")
+
+    def next(self, input):
+        global temp_buffer
+        if input != ">":
+            temp_buffer += input
+            return HtmlTokenizer.BogusComment
+        #TODO EOF CASE
+        else:
+            bogusComment = tk.Comment()
+            bogusComment.data = temp_buffer
+            temp_buffer = ""
+            tokens.append(bogusComment)
+            return HtmlTokenizer.Data
+
+
+
 
 class Comment(State):
     def run(self):
@@ -424,7 +486,7 @@ class DOCTYPEPublicIdentifierDoubleQuote(State):
         if input == '"':
             return HtmlTokenizer.AfterDOCTYPEPublicIdentifier
         elif input == ">":
-            tokens[-1].force_quirk_flag = "on"
+            tokens[-1].force_quirks_flag = "on"
             HtmlTokenizer.tree.emit(tokens[-1])
             raise ParseError("Public Identifier Double Quoted Error", state_change=HtmlTokenizer.Data)
         #TODO cases for EOF and NULL
@@ -470,32 +532,41 @@ class MarkupDeclarationOpen(State):
         print("Markup Declaration Open")
 
     def next(self, input):
-        global buffer, use_buffer
-        buffer += input
-        if buffer not in  "--" and buffer not in "DOCTYPE" and buffer not in "doctype" and buffer not in"[CDATA[":
+        global temp_buffer
+        global use_buffer
+        temp_buffer += input
+        if temp_buffer not in  "--" and temp_buffer not in "DOCTYPE" and temp_buffer not in "doctype" and temp_buffer not in"[CDATA[":
             use_buffer = False
-        print("*" * 50);
         print("*" * 50)
-        print("buffer = " + buffer)
+        print("buffer = " + temp_buffer)
         print("*" * 50);
         if use_buffer:
-            if buffer == '--':
+            print("Use Buffer.")
+            if temp_buffer == '--':
+                tokens.append(tk.Comment())
                 tokens.append(tk.Comment())
                 use_buffer = False
-                buffer = ""
+                temp_buffer = ""
                 return HtmlTokenizer.CommentStart
-            elif re.match(buffer, r"doctype", re.IGNORECASE):
+            elif temp_buffer.lower() == "doctype":
+                print("buffer was %s when it matched doctype" % temp_buffer)
                 use_buffer = False
-                buffer = ""
+                temp_buffer = ""
                 return HtmlTokenizer.DOCTYPE
         #    elif buffer == "[CDATA[":
         #        markup_parse = False
         #        buffer = ""
         #        return HtmlTokenizer.CDATASection
-        #else:
-        #    return HtmlTokenizer.BogusComment
+            elif len(temp_buffer) >6:
+                global use_buffer
+                use_buffer = False
+                temp_buffer = ""
+                return HtmlTokenizer.MarkupDeclarationOpen.next(input)
             else:
                 return HtmlTokenizer.MarkupDeclarationOpen
+        else:
+            return HtmlTokenizer.BogusComment
+
 
 
 
@@ -552,13 +623,27 @@ class HtmlTokenizer(StateMachine):
     def __init__(self):
         # Initial state
         StateMachine.__init__(self, HtmlTokenizer.Data)
-
+HtmlTokenizer.AfterDOCTYPEPublicIdentifier = AfterDOCTYPEPublicIdentifier()
+HtmlTokenizer.AfterDOCTYPEPublicKeyword = AfterDOCTYPEPublicKeyword()
+HtmlTokenizer.AfterDOCTYPESystemKeyword = AfterDOCTYPESystemKeyword()
+HtmlTokenizer.AfterDOCTYPESystemIdentifier = AfterDOCTYPESystemIdentifier()
+HtmlTokenizer.BogusComment = BogusComment()
+HtmlTokenizer.BeforeDOCTYPEPublicIdentifier = BeforeDOCTYPEPublicIdentifier()
+HtmlTokenizer.BeforeDOCTYPESystemIdentifier = BeforeDOCTYPESystemIdentifier()
+HtmlTokenizer.BetweenDOCTYPEPublicAndSystemIdentifier = BetweenDOCTYPEPublicAndSystemIdentifier()
 HtmlTokenizer.Comment = Comment()
 HtmlTokenizer.CommentEnd = CommentEnd()
 HtmlTokenizer.CommentEndDash = CommentEndDash()
 HtmlTokenizer.CommentStart = CommentStart()
 HtmlTokenizer.CommentStartDash = CommentStartDash()
 HtmlTokenizer.Data = Data()
+HtmlTokenizer.DOCTYPE = DOCTYPE()
+HtmlTokenizer.DOCTYPEPublicIdentifierDoubleQuote = DOCTYPEPublicIdentifierDoubleQuote()
+HtmlTokenizer.DOCTYPESystemIdentifierDoubleQuote = DOCTYPESystemIdentifierDoubleQuote()
+HtmlTokenizer.BeforeDOCTYPEName = BeforeDOCTYPEName()
+HtmlTokenizer.DOCTYPEName = DOCTYPEName()
+HtmlTokenizer.AfterDOCTYPEName = AfterDOCTYPEName()
+HtmlTokenizer.BogusDOCTYPE = BogusDOCTYPE()
 HtmlTokenizer.TagOpen = TagOpen()
 HtmlTokenizer.TagName = TagName()
 HtmlTokenizer.EndTagOpen = EndTagOpen()
@@ -576,7 +661,7 @@ HtmlTokenizer.MarkupDeclarationOpen = MarkupDeclarationOpen() #TODO
 
 if __name__ == "__main__":
     print("hello")
-    HtmlTokenizer().run_all('<head attr1="attr1" attr2="attr2><!--Comment Text --></Head><body test="test"><div> body<? </div></body>')
+    HtmlTokenizer().run_all('<!DOCTYPE html public "harry" "cherry"><head attr1="attr1" attr2="attr2><!--Comment Text --></Head><body test="test"><div> body<? </div></body>')
     HtmlTokenizer.tree.print_tree()
 
 
